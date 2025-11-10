@@ -37,8 +37,8 @@
     .leader-tile { background: linear-gradient(180deg, rgba(255,250,205,0.98), rgba(255,255,240,0.96)); box-shadow: 0 12px 28px rgba(214,158,46,.35), 0 0 0 3px rgba(214,158,46,.45) inset; }
   </style>
   <!-- React + Babel -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="p-1 xl:p-3 h-full">
@@ -60,7 +60,7 @@
         case 'trade':
           return (<svg {...common}><path d="M12 4h2v4h-2V4Zm-6 7h6a3 3 0 0 1-6 0Zm12 0h6a3 3 0 0 1-6 0ZM6 20h12v-2H6v2Z" fill="#B7791F"/></svg>);
         case 'politics':
-          return (<svg {...common}><path d="M4 10h16l-8-6-8 6v6H5v-6Z" fill="#4A5568"/></svg>);
+          return (<svg {...common}><path d="M4 10h16l-8-6-8 6Zm-1 2h18v2H3v-2Zm2 3h14v2H5v-2Z" fill="#4A5568"/></svg>);
         case 'merchant':
           return (<svg {...common}><path d="M8 5h8l-1 2H9L8 5Zm-1 4h10l1 2-3 7H7L5 11l2-2Z" fill="#8C6D1F"/><circle cx="12" cy="15" r="2.5" fill="#D4AF37" stroke="#7A5F14" strokeWidth="1"/></svg>);
         case 'cards':
@@ -125,7 +125,7 @@
       const pressed = React.useRef(false);
       const clear = ()=>{ if(longTimer.current){ clearTimeout(longTimer.current); longTimer.current=null; } if(repeatTimer.current){ clearInterval(repeatTimer.current); repeatTimer.current=null; } longFired.current=false; pressed.current=false; };
       const onPointerDown = (e)=>{ e.preventDefault(); pressed.current = true; longFired.current = false; longTimer.current = setTimeout(()=>{ if(!pressed.current) return; longFired.current = true; action(); repeatTimer.current = setInterval(action, options.repeatDelay); }, options.initialDelay); };
-      const onPointerUp = ()=>{ if(!pressed.current){ clear(); return; } if(!longFired	current){ action(); } clear(); };
+      const onPointerUp = ()=>{ if(!pressed.current){ clear(); return; } if(!longFired.current){ action(); } clear(); };
       const onPointerLeave = clear; const onPointerCancel = clear;
       React.useEffect(()=>clear,[]);
       return { onPointerDown, onPointerUp, onPointerLeave, onPointerCancel };
@@ -185,6 +185,7 @@
       const panelStyle = isLeader ? { ...baseStyle, background: 'linear-gradient(180deg, rgba(255,250,205,0.98), rgba(255,255,240,0.96))' } : baseStyle;
       const compact = mode==='v2';
 
+      // Split toggles into two lanes: Others and Metropolises
       const metros = toggles.filter(([key])=> key.startsWith('metropolis'));
       const others = toggles.filter(([key])=> !key.startsWith('metropolis'));
 
@@ -211,8 +212,11 @@
             </div>
           </div>
 
+          {/* Icon toggles */}
           <div className="mt-2 mb-2 flex flex-wrap justify-center gap-3 md:gap-4" role="group" aria-label="Awards and bonuses">
+            {/* Derived Longest Road indicator (read-only) */}
             <IconToggle icon="road" label="Longest Road" points={2} checked={hasLongest} readOnly size={28} />
+            {/* Derived Harbormaster indicator (read-only, TB only) */}
             {expansions.tb && (
               <IconToggle icon="anchor" label="Harbormaster" points={2} checked={hasHarborMaster} readOnly size={28} />
             )}
@@ -228,9 +232,12 @@
             </div>
           )}
 
+          {/* Counters */}
           <div className="overflow-y-auto">
             <Counter icon="cards" label="Victory Cards" value={player.vpCards} onChange={v=>onChange('vpCards', v)} compact={compact} />
+            {/* Roads counter (drives Longest Road) */}
             <Counter icon="road" label="Roads" value={player.roads} onChange={v=>onChange('roads', v)} compact={compact} />
+            {/* Gold only for Traders & Barbarians */}
             {expansions.tb && (
               <>
                 <Counter icon="anchor" label="Harbors" value={player.harbors} onChange={v=>onChange('harbors', v)} compact={compact} />
@@ -238,6 +245,7 @@
                   labelClassName={goldRank==='most' ? 'text-green-700 font-bold' : (goldRank==='least' ? 'text-red-700 font-bold' : undefined)} />
               </>
             )}
+            {/* Islands only for Seafarers */}
             {expansions.seafarers && (
               <Counter icon="island" label="Islands" value={player.islands} onChange={v=>onChange('islands', v)} compact={compact} />
             )}
@@ -248,18 +256,22 @@
       );
     }
 
+    // Compute score (for leader + gold ranks)
     const computeScore = (p, exp, bonus, hasLongest, hasHarborMaster)=>{
       const base = TOGGLES_ALL.filter(([, , , , show])=>show(exp)).reduce((s,[key, , pts])=> s + (p[key]? pts:0), 0);
       return base + (hasLongest?2:0) + ((exp.tb && hasHarborMaster)?2:0) + p.vpCards + (exp.seafarers? p.islands*2:0) + p.settlements + p.cities*2 + (exp.tb? bonus:0);
     };
 
+    // === Root App ===========================================================
     function App(){
       const mode = 'v3';
+
+      // Restore from localStorage
       const [players, setPlayers] = useState(()=>{
         try{
           const raw = localStorage.getItem('catan.players.v3');
           if(raw){ const parsed = JSON.parse(raw); if(Array.isArray(parsed) && parsed.length){ return parsed.map((p,i)=> ({...DEFAULT_PLAYER(i), ...p})); } }
-        }catch(_){}
+        }catch(_){/* ignore */}
         return Array(4).fill().map((_,i)=>DEFAULT_PLAYER(i));
       });
 
@@ -267,25 +279,30 @@
         try{
           const raw = localStorage.getItem('catan.expansions.v2');
           if(raw){ const e = JSON.parse(raw); return { ck: !!e.ck, seafarers: !!e.seafarers, tb: !!e.tb }; }
-        }catch(_){}
+        }catch(_){/* ignore */}
         return { ck:false, seafarers:false, tb:false };
       });
 
+      // Persist
       useEffect(()=>{ try{ localStorage.setItem('catan.players.v3', JSON.stringify(players)); }catch(_){ } }, [players]);
       useEffect(()=>{ try{ localStorage.setItem('catan.expansions.v2', JSON.stringify(expansions)); }catch(_){ } }, [expansions]);
 
+      // Exclusive toggle handling + generic updates + City↔Settlement conversion
       const updatePlayer = useCallback((idx, field, value)=>{
         setPlayers(prev => prev.map((p,i)=>{
           if(i !== idx){
             if(value === true && EXCLUSIVE_KEYS.includes(field)) return { ...p, [field]: false };
             return p;
           }
+
           let next = { ...p };
+
           const NUM_FIELDS = new Set(['vpCards','gold','harbors','roads','islands','settlements','cities']);
           if(NUM_FIELDS.has(field)){
             const n = Math.max(0, Math.floor(Number(value)||0));
             value = n;
           }
+
           if(field === 'cities'){
             const prevCities = p.cities|0;
             const nextCities = Math.max(0, Number(value)||0);
@@ -304,6 +321,7 @@
         }));
       }, []);
 
+      // Players +/–
       const addPlayer    = ()=> setPlayers(ps=>[...ps, DEFAULT_PLAYER(ps.length)]);
       const removePlayer = ()=> setPlayers(ps=> ps.length>1 ? ps.slice(0,-1) : ps);
       const resetAll     = ()=> setPlayers(Array(4).fill().map((_,i)=>DEFAULT_PLAYER(i)));
@@ -327,7 +345,6 @@
 
       const goldBonuses = useMemo(()=> expansions.tb ? computeGoldBonuses(players) : players.map(()=>0), [players, expansions.tb]);
       const LONGEST_ROAD_THRESHOLD = 5;
-
       const roadCounts = useMemo(()=> players.map((p,i)=> ({ i, v: Math.max(0, Math.floor(Number(p.roads)||0)) })), [players]);
       const lrHolderRef = useRef(-1);
       const lrHolder = useMemo(()=>{
@@ -342,7 +359,6 @@
         return holder;
       }, [roadCounts]);
       const golds = useMemo(() => players.map(p=> p.gold), [players]);
-
       const harborCounts = useMemo(()=> players.map((p,i)=> ({ i, v: Math.max(0, Math.floor(Number(p.harbors)||0)) })), [players]);
       const hbHolderRef = useRef(-1);
       const hbIndex = useMemo(()=>{
